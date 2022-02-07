@@ -1,12 +1,21 @@
 import { useState, useEffect, useRef } from "react"
 import { getAuth, onAuthStateChanged } from "firebase/auth"
+import {
+  getStorage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+} from "firebase/storage"
+import { addDoc, collection, serverTimestamp } from "firebase/firestore"
 import { useNavigate } from "react-router-dom"
 import Spinner from "../components/Spinner"
+import { db } from "../firebase.config"
+import { v4 as uuidv4 } from "uuid"
 import { toast } from "react-toastify"
 
 function CreateListing() {
   const [loading, setLoading] = useState(false)
-  const [geolocation, setGeolocation] = useState(true)
+  const [ToggleGeolocation, setToggleGeolocation] = useState(true)
   const [formData, setFormData] = useState({
     type: "rent",
     name: "",
@@ -77,18 +86,18 @@ function CreateListing() {
       return
     }
 
-    let curLocation = {}
+    let geolocation = {}
     let location
 
-    if (geolocation) {
+    if (ToggleGeolocation) {
       const response = await fetch(
         `https://maps.googleapis.com/maps/api/geocode/json?address=${address}&key=${process.env.REACT_APP_GEOCODE_APIKEY}`
       )
 
       const data = await response.json()
 
-      curLocation.lat = data.results[0]?.geometry.location.lat ?? 0
-      curLocation.lng = data.results[0]?.geometry.location.lng ?? 0
+      geolocation.lat = data.results[0]?.geometry.location.lat ?? 0
+      geolocation.lng = data.results[0]?.geometry.location.lng ?? 0
 
       location =
         data.status === "ZERO_RESULTS"
@@ -100,13 +109,63 @@ function CreateListing() {
         setLoading(false)
         return
       }
-      setLoading(false)
     } else {
-      curLocation.lat = latitude
-      curLocation.lng = longitude
-      location = address
-      setLoading(false)
+      geolocation.lat = latitude
+      geolocation.lng = longitude
     }
+
+    const storeImage = async image => {
+      return new Promise((resolve, reject) => {
+        const storage = getStorage()
+        const fileName = `${auth.currentUser.uid}-${image.name}-${uuidv4()}`
+
+        const storageRef = ref(storage, "images/" + fileName)
+
+        const uploadTask = uploadBytesResumable(storageRef, image)
+
+        uploadTask.on(
+          "state_changed",
+          snapshot => {
+            const progress =
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100
+            console.log("Upload is " + progress + "% done")
+          },
+          error => {
+            reject(error)
+          },
+          () => {
+            getDownloadURL(uploadTask.snapshot.ref).then(downloadURL => {
+              resolve(downloadURL)
+            })
+          }
+        )
+      })
+    }
+
+    const imgUrls = await Promise.all(
+      [...images].map(image => storeImage(image))
+    ).catch(() => {
+      setLoading(false)
+      toast.error("Images not uploaded")
+      return
+    })
+
+    const dataCopy = {
+      ...formData,
+      imgUrls,
+      geolocation,
+      timestamp: serverTimestamp(),
+    }
+
+    dataCopy.location = address
+    delete dataCopy.images
+    delete dataCopy.address
+    !dataCopy.offer && delete dataCopy.discountedPrice
+
+    const docRef = await addDoc(collection(db, "listings"), dataCopy)
+    setLoading(false)
+    toast.success("Listing created")
+    navigate(`/category/${dataCopy.type}/${docRef.id}`)
   }
 
   const onMutate = event => {
@@ -275,7 +334,7 @@ function CreateListing() {
             required
           ></textarea>
 
-          {!geolocation && (
+          {!ToggleGeolocation && (
             <div className="formLatLng flex">
               <div>
                 <label className="formLabel">Latitude</label>
