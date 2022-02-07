@@ -6,17 +6,18 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage"
-import { addDoc, collection, serverTimestamp } from "firebase/firestore"
-import { useNavigate } from "react-router-dom"
+import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore"
+import { useNavigate, useParams } from "react-router-dom"
 import Spinner from "../components/Spinner"
 import { db } from "../firebase.config"
 import { v4 as uuidv4 } from "uuid"
 import { toast } from "react-toastify"
 
-function CreateListing() {
+function EditListing() {
   const [loading, setLoading] = useState(false)
   //eslint-disable-next-line
   const [ToggleGeolocation, setToggleGeolocation] = useState(true)
+  const [listing, setListing] = useState(false)
   const [formData, setFormData] = useState({
     type: "rent",
     name: "",
@@ -51,7 +52,36 @@ function CreateListing() {
 
   const auth = getAuth()
   const navigate = useNavigate()
+  const params = useParams()
   const isMounted = useRef(true)
+
+  useEffect(() => {
+    setLoading(true)
+    const fetchListing = async () => {
+      const docRef = doc(db, "listings", params.listingId)
+      const docSnapshot = await getDoc(docRef)
+
+      if (docSnapshot.exists()) {
+        setListing(docSnapshot.data())
+        setFormData({
+          ...docSnapshot.data(),
+          address: docSnapshot.data().location,
+        })
+        setLoading(false)
+      } else {
+        navigate("/")
+        toast.error("Listing does not exist")
+      }
+    }
+    fetchListing()
+  }, [params.listingId, navigate])
+
+  useEffect(() => {
+    if (listing && listing.userRef !== auth.currentUser.uid) {
+      toast.error("You can't edit that listing")
+      navigate("/")
+    }
+  })
 
   useEffect(() => {
     if (isMounted) {
@@ -163,9 +193,10 @@ function CreateListing() {
     delete dataCopy.address
     !dataCopy.offer && delete dataCopy.discountedPrice
 
-    const docRef = await addDoc(collection(db, "listings"), dataCopy)
+    const docRef = doc(db, "listings", params.listingId)
+    await updateDoc(docRef, dataCopy)
     setLoading(false)
-    toast.success("Listing created")
+    toast.success("Listing edited successfully")
     navigate(`/category/${dataCopy.type}/${docRef.id}`)
   }
 
@@ -200,7 +231,7 @@ function CreateListing() {
   return (
     <div className="profile">
       <header>
-        <p className="pageHeader">Create a Listing</p>
+        <p className="pageHeader">Edit Listing</p>
       </header>
       <main>
         <form onSubmit={onSubmit}>
@@ -432,7 +463,7 @@ function CreateListing() {
             required
           />
           <button className="primaryButton createListingButton" type="submit">
-            Create Listing
+            Edit Listing
           </button>
         </form>
       </main>
@@ -440,4 +471,4 @@ function CreateListing() {
   )
 }
 
-export default CreateListing
+export default EditListing
