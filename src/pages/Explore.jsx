@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom"
 import RentCategoryImage from "../assets/jpg/rentCategoryImage.jpg"
 import SellCategoryImage from "../assets/jpg/sellCategoryImage.jpg"
+import ExploreSlider from "../components/ExploreSlider"
 
 function Explore() {
   return (
@@ -9,7 +10,7 @@ function Explore() {
         <p className="pageHeader">Explore</p>
       </header>
       <main>
-        {/* Slider */}
+        <ExploreSlider />
 
         <p className="exploreCategoryHeading">Categories</p>
         <div className="exploreCategories">
